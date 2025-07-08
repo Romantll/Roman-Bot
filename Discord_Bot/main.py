@@ -61,8 +61,8 @@ async def addidolpic(interaction: discord.Interaction, name: str, url: str):
         return
 
     #Continue with image validation and JSON update...
-    if not url.lower().endswith((".jpg", ".jpeg", ".png")):
-        await interaction.followup.send("❌ URL must end in .jpg, .jpeg, or .png")
+    if not url.lower().endswith((".jpg", ".jpeg", ".png", ".gif")):
+        await interaction.followup.send("❌ URL must end in .jpg, .jpeg, .gif, or .png")
         return
 
     try:
@@ -114,13 +114,13 @@ async def idolpic(interaction: discord.Interaction, name: str):
     else:
         await interaction.followup.send(f"I couldn't find images for **{name.title()}**.")
 
-
+#code for the "/ping" command mainly used for testing
 @client.tree.command(name="ping")
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message("pong!")
 
 
-@client.tree.command(name="comebacks", description="Shows upcoming K-pop comebacks from Google Sheets")
+@client.tree.command(name="comebacks", description="Shows upcoming comebacks")
 async def comebacks(interaction: discord.Interaction):
     await interaction.response.defer()
     
@@ -134,7 +134,7 @@ async def comebacks(interaction: discord.Interaction):
         await interaction.followup.send("📭 No upcoming comebacks found.")
         return
 
-    msg = "**📢 Upcoming K-pop Comebacks:**\n" + "\n".join(results[:10])
+    msg = "**📢 Upcoming Comebacks:**\n" + "\n".join(results[:10])
     await interaction.followup.send(msg)
 
 
