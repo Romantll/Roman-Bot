@@ -1,5 +1,6 @@
 import discord
 import json
+from reminder_manager import add_reminder
 from comebackSheet import get_upcoming_comebacks
 from discord import app_commands
 from redditpicture import get_random_image
@@ -136,6 +137,31 @@ async def comebacks(interaction: discord.Interaction):
 
     msg = "**📢 Upcoming Comebacks:**\n" + "\n".join(results[:10])
     await interaction.followup.send(msg)
+
+
+#Code for the "/remind" command to set a reminder
+@client.tree.command(name="addreminder", description="Set a reminder for a comeback")
+@app_commands.describe(
+    group="Name of the idol or group",
+    date="Date of the comeback (YYYY-MM-DD)",
+    time="Time of the comeback (HH:MM, 24-hour format)",
+    title="Optional title for the reminder"
+)
+
+async def addreminder(interaction: discord.Interaction, group: str, date: str, time: str, title: str = None):
+    success, error = add_reminder(
+        user_id=interaction.user.id,
+        channel_id=interaction.channel_id,
+        group=group.strip(),
+        date_str=date.strip(),
+        time_str=time.strip(),
+        title=title.strip() if title else None
+    )
+
+    if success:
+        await interaction.response.send_message(f"✅ Reminder set for **{group}** on {date} at {time}.")
+    else:
+        await interaction.response.send_message(f"❌ Failed to set reminder: {error}")
 
 
 
