@@ -2,6 +2,7 @@ import discord
 import json
 import os
 import pytz
+from dateutil import parser
 from datetime import datetime, timedelta
 from reminder_manager import add_reminder
 from comebackSheet import get_upcoming_comebacks
@@ -169,25 +170,29 @@ async def addreminder(interaction: discord.Interaction, group: str):
 
     #Get details for match
     matched = found[0]
-    parts = matched.split(" - ")
-    if len(parts) < 2:
+    parts = matched.split(" – ")
+    if len(parts) < 3:
         await interaction.response.send_message("Error parsing comeback data.")
         return
 
     # Extract date string from matched comeback
-    date_str = parts[1]
+    date_str = parts[2]
 
     #Convert KST to UTC
     kst = pytz.timezone('Asia/Seoul')
+
+    # Combine the date and time string into one
+    date_part = date_str.split("at")[0].strip()
+    time_part = date_str.split("at")[1].replace("KST", "").strip()
+    datetime_str = f"{date_part} {time_part}"
+
     try:
-        time_str = date_str.split("at")[1].replace("KST", "").strip()
-        hour = int(time_str.split(":")[0])
-        date_obj = datetime.strptime(date_str.split("at")[0].strip(), "%Y-%m-%d")
-        kst_time = kst.localize(datetime(date_obj.year, date_obj.month, date_obj.day, hour))
+        kst_naive = parser.parse(datetime_str)
+        kst_time = kst.localize(kst_naive)
     except Exception as e:
-        await interaction.response.send_message(f"❌ Error parsing date: {e}")
+        await interaction.response.send_message(f"❌ Error parsing date/time: {e}")
         return
-    
+
     reminder_time = [
         (kst_time - timedelta(hours=1)).isoformat(),  # 1 hour before
         (kst_time - timedelta(minutes=30)).isoformat(),  # 30 minutes before
@@ -207,7 +212,7 @@ async def addreminder(interaction: discord.Interaction, group: str):
 
     save_reminders(reminders)
     await interaction.response.send_message(
-        f"✅ Reminder set for **{group}** - {matched}!\n You will be pinged 1h, 30m and at the time of the comeback.", ephemeral=True
+        f"✅ Reminder set for **{group}** - {matched}!\n You will be pinged 1h, 30m, and at the time of the comeback.", ephemeral=True
     )
 
     
