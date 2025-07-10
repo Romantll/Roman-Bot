@@ -2,6 +2,7 @@ import discord
 import json
 import os
 import pytz
+import re
 from dateutil import parser
 from datetime import datetime, timedelta
 from reminder_manager import add_reminder
@@ -156,50 +157,52 @@ async def comebacks(interaction: discord.Interaction):
     await interaction.followup.send(msg)
 
 
-#Code for the "/remind" command to set a reminder
 @client.tree.command(name="addreminder", description="Set a reminder for a comeback")
 @app_commands.describe(group="Group name (e.g., Jo Yuri, Miyeon, Red Velvet)")
 async def addreminder(interaction: discord.Interaction, group: str):
     comebacks = get_upcoming_comebacks()
 
-    #Fuzzy match to make it easier for users to find the group
+    # Try fuzzy match
     found = [c for c in comebacks if group.lower() in c.lower()]
     if not found:
         await interaction.response.send_message(f"❌ No comebacks found for **{group}**.")
         return
 
-    #Get details for match
+    # Get matched comeback string
     matched = found[0]
-    parts = matched.split(" – ")
-    if len(parts) < 3:
-        await interaction.response.send_message("Error parsing comeback data.")
-        return
-
-    # Extract date string from matched comeback
-    date_str = parts[2]
-
-    #Convert KST to UTC
-    kst = pytz.timezone('Asia/Seoul')
-
-    # Combine the date and time string into one
-    date_part = date_str.split("at")[0].strip()
-    time_part = date_str.split("at")[1].replace("KST", "").strip()
-    datetime_str = f"{date_part} {time_part}"
+    await interaction.response.send_message(f"✅ Reminder set for **{group}** - {matched}!", ephemeral=True)
 
     try:
+        # Split only at the LAST dash to get the date+time segment
+        head, date_str = matched.rsplit("–", 1)
+        date_str = date_str.strip()
+
+        # Parse the date and time
+        if "at" not in date_str:
+            raise ValueError("Missing 'at' in date string")
+
+        date_part, time_part = date_str.split("at")
+        date_part = date_part.strip()
+        time_part = time_part.replace("KST", "").strip()
+        datetime_str = f"{date_part} {time_part}"
+
+        # Convert to KST datetime
+        kst = pytz.timezone('Asia/Seoul')
         kst_naive = parser.parse(datetime_str)
         kst_time = kst.localize(kst_naive)
+
     except Exception as e:
-        await interaction.response.send_message(f"❌ Error parsing date/time: {e}")
+        await interaction.followup.send(f"❌ Error parsing date/time: {e}", ephemeral=True)
         return
 
+    # Create reminder times
     reminder_time = [
-        (kst_time - timedelta(hours=1)).isoformat(),  # 1 hour before
-        (kst_time - timedelta(minutes=30)).isoformat(),  # 30 minutes before
-        kst_time.isoformat(),  # At the time of the comeback
+        (kst_time - timedelta(hours=1)).isoformat(),
+        (kst_time - timedelta(minutes=30)).isoformat(),
+        kst_time.isoformat(),
     ]
 
-
+    # Save to reminders
     reminders = load_reminders()
     for t in reminder_time:
         reminders.append({
@@ -209,13 +212,13 @@ async def addreminder(interaction: discord.Interaction, group: str):
             "group": group,
             "title_utc": t
         })
-
     save_reminders(reminders)
-    await interaction.response.send_message(
-        f"✅ Reminder set for **{group}** - {matched}!\n You will be pinged 1h, 30m, and at the time of the comeback.", ephemeral=True
+
+    await interaction.followup.send(
+        f"🔔 You will be pinged **1h**, **30m**, and **at the time** of **{group}**’s comeback.\n\n"
+        f"🗓️ {matched}", ephemeral=True
     )
 
-    
 
 
 
