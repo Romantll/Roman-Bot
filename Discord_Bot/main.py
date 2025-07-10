@@ -1,16 +1,18 @@
 import discord
 import json
+import os
+import pytz
+from datetime import datetime, timedelta
 from reminder_manager import add_reminder
 from comebackSheet import get_upcoming_comebacks
 from discord import app_commands
 from redditpicture import get_random_image
 from dotenv import load_dotenv
 from idolImages import get_idol_image,get_available_idols 
-import os
 load_dotenv()
 
 Allowed_User_IDS = [130824833528233984, 121081639571816449]  #User IDs of allowed users
-
+REMINDER_FILE = "comeback_reminders.json"
 
 class Client(discord.Client):
     def __init__(self, *, intents: discord.Intents):
@@ -27,7 +29,21 @@ class Client(discord.Client):
        
        if message.content.startswith('hello'):
            await message.channel.send(f'Hello {message.author}')
-    
+
+#load reminder logic
+def load_reminders():
+    if not os.path.exists(REMINDER_FILE):
+        with open(REMINDER_FILE, 'r') as f:
+            return json.load(f)
+    return []
+
+# Function to save reminders to the JSON file
+def save_reminders(reminders):
+    with open(REMINDER_FILE, 'w') as f:
+        json.dump(reminders, f, indent=4)
+
+
+
 intents = discord.Intents.default()
 intents.message_content = True
 
@@ -141,27 +157,60 @@ async def comebacks(interaction: discord.Interaction):
 
 #Code for the "/remind" command to set a reminder
 @client.tree.command(name="addreminder", description="Set a reminder for a comeback")
-@app_commands.describe(
-    group="Name of the idol or group",
-    date="Date of the comeback (YYYY-MM-DD)",
-    time="Time of the comeback (HH:MM, 24-hour format)",
-    title="Optional title for the reminder"
-)
+@app_commands.describe(group="Group name (e.g., Jo Yuri, Miyeon, Red Velvet)")
+async def addreminder(interaction: discord.Interaction, group: str):
+    comebacks = get_upcoming_comebacks()
 
-async def addreminder(interaction: discord.Interaction, group: str, date: str, time: str, title: str = None):
-    success, error = add_reminder(
-        user_id=interaction.user.id,
-        channel_id=interaction.channel_id,
-        group=group.strip(),
-        date_str=date.strip(),
-        time_str=time.strip(),
-        title=title.strip() if title else None
+    #Fuzzy match to make it easier for users to find the group
+    found = [c for c in comebacks if group.lower() in c.lower()]
+    if not found:
+        await interaction.response.send_message(f"❌ No comebacks found for **{group}**.")
+        return
+
+    #Get details for match
+    matched = found[0]
+    parts = matched.split(" - ")
+    if len(parts) < 2:
+        await interaction.response.send_message("Error parsing comeback data.")
+        return
+
+    # Extract date string from matched comeback
+    date_str = parts[1]
+
+    #Convert KST to UTC
+    kst = pytz.timezone('Asia/Seoul')
+    try:
+        time_str = date_str.split("at")[1].replace("KST", "").strip()
+        hour = int(time_str.split(":")[0])
+        date_obj = datetime.strptime(date_str.split("at")[0].strip(), "%Y-%m-%d")
+        kst_time = kst.localize(datetime(date_obj.year, date_obj.month, date_obj.day, hour))
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Error parsing date: {e}")
+        return
+    
+    reminder_time = [
+        (kst_time - timedelta(hours=1)).isoformat(),  # 1 hour before
+        (kst_time - timedelta(minutes=30)).isoformat(),  # 30 minutes before
+        kst_time.isoformat(),  # At the time of the comeback
+    ]
+
+
+    reminders = load_reminders()
+    for t in reminder_time:
+        reminders.append({
+            "user_id": interaction.user.id,
+            "channel_id": interaction.channel_id,
+            "datetime_utc": t,
+            "group": group,
+            "title_utc": t
+        })
+
+    save_reminders(reminders)
+    await interaction.response.send_message(
+        f"✅ Reminder set for **{group}** - {matched}!\n You will be pinged 1h, 30m and at the time of the comeback.", ephemeral=True
     )
 
-    if success:
-        await interaction.response.send_message(f"✅ Reminder set for **{group}** on {date} at {time}.")
-    else:
-        await interaction.response.send_message(f"❌ Failed to set reminder: {error}")
+    
 
 
 
