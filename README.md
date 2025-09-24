@@ -14,24 +14,6 @@ A multipurpose **Discord bot** built with `discord.py`, featuring K-pop comeback
 
 ---
 
-## 📁 Project Structure
-
-```
-Roman-Bot/
-├── .env
-├── main.py
-├── comebackSheet.py
-├── idolImages.py
-├── redditpicture.py
-├── reminder_manager.py
-├── idol_images.json
-├── comeback_reminders.json
-├── kpop-comebacks-credentials.json
-└── requirements.txt
-```
-
----
-
 ## ⚙️ Setup Instructions
 
 ### 1. Clone the repository
