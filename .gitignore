@@ -7,6 +7,10 @@ __pycache__/
 # Environment variables
 .env
 
+# Google service account credentials
+kpop-comebacks-credentials.json
+*credentials*.json
+
 # Virtual environments
 venv/
 .venv/
