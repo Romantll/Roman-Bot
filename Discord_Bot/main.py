@@ -5,12 +5,13 @@ import pytz
 import re
 from dateutil import parser
 from datetime import datetime, timedelta
+from discord.ext import tasks
 from reminder_manager import add_reminder
 from comebackSheet import get_upcoming_comebacks
 from discord import app_commands
 from redditpicture import get_random_image
 from dotenv import load_dotenv
-from idolImages import get_idol_image,get_available_idols 
+from idolImages import get_idol_image,get_available_idols
 load_dotenv()
 
 Allowed_User_IDS = [130824833528233984, 121081639571816449]  #User IDs of allowed users
@@ -23,6 +24,7 @@ class Client(discord.Client):
 
     async def on_ready(self):
         await self.tree.sync()
+        check_reminders.start()
         print(f'Logged in as {self.user}!')
     
     async def on_message(self, message):
@@ -32,14 +34,14 @@ class Client(discord.Client):
        if message.content.startswith('hello'):
            await message.channel.send(f'Hello {message.author}')
 
-#load reminder logic
+# Load reminders from JSON file
 def load_reminders():
     if not os.path.exists(REMINDER_FILE):
-        with open(REMINDER_FILE, 'r') as f:
-            return json.load(f)
-    return []
+        return []
+    with open(REMINDER_FILE, 'r') as f:
+        return json.load(f)
 
-# Function to save reminders to the JSON file
+# Save reminders to JSON file
 def save_reminders(reminders):
     with open(REMINDER_FILE, 'w') as f:
         json.dump(reminders, f, indent=4)
@@ -186,31 +188,31 @@ async def addreminder(interaction: discord.Interaction, group: str):
         time_part = time_part.replace("KST", "").strip()
         datetime_str = f"{date_part} {time_part}"
 
-        # Convert to KST datetime
+        # Parse KST and convert to UTC
         kst = pytz.timezone('Asia/Seoul')
         kst_naive = parser.parse(datetime_str)
         kst_time = kst.localize(kst_naive)
+        utc_time = kst_time.astimezone(pytz.utc)
 
     except Exception as e:
         await interaction.followup.send(f"❌ Error parsing date/time: {e}", ephemeral=True)
         return
 
-    # Create reminder times
-    reminder_time = [
-        (kst_time - timedelta(hours=1)).isoformat(),
-        (kst_time - timedelta(minutes=30)).isoformat(),
-        kst_time.isoformat(),
+    # Create reminder times in UTC
+    reminder_times = [
+        (utc_time - timedelta(hours=1)).isoformat(),
+        (utc_time - timedelta(minutes=30)).isoformat(),
+        utc_time.isoformat(),
     ]
 
     # Save to reminders
     reminders = load_reminders()
-    for t in reminder_time:
+    for t in reminder_times:
         reminders.append({
             "user_id": interaction.user.id,
             "channel_id": interaction.channel_id,
             "datetime_utc": t,
             "group": group,
-            "title_utc": t
         })
     save_reminders(reminders)
 
@@ -220,6 +222,27 @@ async def addreminder(interaction: discord.Interaction, group: str):
     )
 
 
+
+
+@tasks.loop(minutes=1)
+async def check_reminders():
+    now_utc = datetime.now(pytz.utc)
+    reminders = load_reminders()
+    remaining = []
+
+    for reminder in reminders:
+        reminder_time = datetime.fromisoformat(reminder["datetime_utc"])
+        if reminder_time.tzinfo is None:
+            reminder_time = pytz.utc.localize(reminder_time)
+
+        if now_utc >= reminder_time:
+            channel = client.get_channel(reminder["channel_id"])
+            if channel:
+                await channel.send(f"🔔 <@{reminder['user_id']}> Reminder: **{reminder['group']}** has a comeback!")
+        else:
+            remaining.append(reminder)
+
+    save_reminders(remaining)
 
 
 client.run(os.getenv("DISCORD_TOKEN"))
