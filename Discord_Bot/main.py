@@ -146,7 +146,7 @@ async def comebacks(interaction: discord.Interaction):
     try:
         results = get_upcoming_comebacks()
     except Exception as e:
-        await interaction.followup.send("❌ Could not fetch comeback data.")
+        await interaction.followup.send(f"❌ Could not fetch comeback data: {e}")
         return
 
     if not results:
