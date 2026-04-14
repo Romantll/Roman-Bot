@@ -1,0 +1,7 @@
+discord.py
+asyncpraw
+python-dotenv
+gspread
+oauth2client
+pytz
+python-dateutil
