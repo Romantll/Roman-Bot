@@ -89,16 +89,14 @@ async def addidolpic(interaction: discord.Interaction, name: str, url: str):
             import aiohttp
             async with aiohttp.ClientSession() as session:
                 async with session.head(f'https://i.imgur.com/{image_id}', allow_redirects=True) as resp:
-                    content_type = resp.headers.get('Content-Type', '')
-                    if 'gif' in content_type:
-                        ext = '.gif'
-                    elif 'png' in content_type:
-                        ext = '.png'
-                    elif 'mp4' in content_type or 'video' in content_type:
-                        ext = '.mp4'
+                    final_url = str(resp.url)
+                    # Extract extension from the final redirected URL
+                    for ext in ('.mp4', '.gif', '.png', '.jpeg', '.jpg'):
+                        if final_url.lower().endswith(ext):
+                            url = final_url
+                            break
                     else:
-                        ext = '.jpg'
-            url = f'https://i.imgur.com/{image_id}{ext}'
+                        url = f'https://i.imgur.com/{image_id}.jpg'
         except Exception:
             url = f'https://i.imgur.com/{image_id}.jpg'
 
