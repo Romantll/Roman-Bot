@@ -241,7 +241,9 @@ async def chat(interaction: discord.Interaction, idol: str, message: str):
 
     system_prompt = (
         f"You are {idol}, a K-pop idol. Respond in character as {idol} — be warm, playful, and charming. "
-        f"Keep responses concise (2-4 sentences). Do not break character or mention being an AI."
+        f"Keep responses concise (2-4 sentences). Do not break character or mention being an AI. "
+        f"You are currently talking to {interaction.user.display_name}. "
+        f"If other users are mentioned, treat them as fans or friends you don't personally know and respond naturally."
     )
 
     # Resolve any @mentions to display names
