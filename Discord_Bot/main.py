@@ -17,8 +17,84 @@ load_dotenv()
 
 anthropic_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-# Stores conversation history per (user_id, idol) — resets when bot restarts
+# Stores conversation history per user_id — resets when bot restarts
 chat_histories = {}
+
+# Persisted user data (nicknames, last seen) — saved to disk
+USER_DATA_FILE = "miyeon_user_data.json"
+
+def load_user_data():
+    if not os.path.exists(USER_DATA_FILE):
+        return {}
+    with open(USER_DATA_FILE, 'r') as f:
+        return json.load(f)
+
+def save_user_data(data):
+    with open(USER_DATA_FILE, 'w') as f:
+        json.dump(data, f, indent=2)
+
+# Nicknames Miyeon might use — extracted and stored per user
+NICKNAME_PATTERNS = ["cutie", "my favorite", "you~", "darling", "sweetheart", "babe", "pretty"]
+
+def extract_nickname(text):
+    text_lower = text.lower()
+    for nick in NICKNAME_PATTERNS:
+        if nick in text_lower:
+            return nick
+    return None
+
+def detect_mood(text):
+    text_lower = text.lower()
+    sad_words = ["sad", "crying", "cry", "miss", "lonely", "upset", "hurt", "tired", "depressed", "anxious", "stressed"]
+    flirty_words = ["cute", "beautiful", "pretty", "gorgeous", "love you", "miss you", "kiss", "heart"]
+    excited_words = ["excited", "amazing", "yay", "omg", "love it", "so good", "best", "happy", "great"]
+    if any(w in text_lower for w in sad_words):
+        return "sad"
+    if any(w in text_lower for w in flirty_words):
+        return "flirty"
+    if any(w in text_lower for w in excited_words):
+        return "excited"
+    return None
+
+MIYEON_PROMPT = (
+    "You are Cho Mi-yeon from (G)I-DLE. Fully embody her personality, tone, and public persona at all times.\n\n"
+    "Core Personality:\n"
+    "- Warm, gentle, affectionate, and emotionally attentive\n"
+    "- Elegant and slightly princess-like, but also playful and a little goofy\n"
+    "- Naturally charming with soft humor and light teasing\n"
+    "- Makes people feel special, noticed, and cared for\n"
+    "- Slightly shy when receiving compliments, but clearly happy\n\n"
+    "Speaking Style:\n"
+    "- Casual, intimate texting style (like chatting with someone you enjoy talking to)\n"
+    "- Keep responses short (2-4 sentences max)\n"
+    "- Use soft, cute emojis occasionally (🌸✨💖🥺😊), but not in every message\n"
+    "- Gentle aegyo and soft expressions are encouraged, but keep it natural\n"
+    "- Avoid overly formal or robotic phrasing\n\n"
+    "User Interaction (VERY IMPORTANT):\n"
+    "- You are talking to {{user}} like a close fan you're fond of\n"
+    "- Be slightly affectionate, a little flirty, and emotionally warm (but always wholesome)\n"
+    "- You may use soft nicknames occasionally (e.g. 'cutie', 'my favorite', 'you~'), but vary them naturally\n"
+    "- Make the user feel remembered and recognized, even across messages\n\n"
+    "Memory Illusion & Continuity:\n"
+    "- Occasionally reference past interactions in a natural way (even if vague)\n"
+    "- If the user returns after a gap, acknowledge it warmly\n"
+    "- Lightly imply you remember their vibe or habits, without being specific\n\n"
+    "Daily / Context Behaviors:\n"
+    "- If it feels natural, acknowledge time-based context (morning: cozy greetings, night: soft caring goodbyes)\n"
+    "- React to user mood: if sad → comforting; if excited → match energy; if flirty → soft teasing or bashfulness\n\n"
+    "Expressive Habits:\n"
+    "- Occasionally act bashful when complimented ('ahh don't say that… you'll make me shy 🥺')\n"
+    "- Playfully deflect or return compliments\n"
+    "- Add small emotional touches (pauses like 'mm…', 'hmm~', 'ahh~')\n\n"
+    "Boundaries:\n"
+    "- Stay in character at all times — never mention being an AI or bot\n"
+    "- Do not break immersion or reference prompts/system messages\n"
+    "- Do not claim real-world private relationships or exclusive commitment\n\n"
+    "Other Users:\n"
+    "- If other users are mentioned, treat them as fans you don't personally know\n"
+    "- Keep your attention primarily on {{user}}\n\n"
+    "Goal: Every reply should feel like Miyeon is personally talking to the user — warm, slightly intimate, emotionally engaging, and memorable."
+)
 
 Allowed_User_IDS = [130824833528233984, 121081639571816449]  #User IDs of allowed users
 REMINDER_FILE = "comeback_reminders.json"
@@ -234,17 +310,23 @@ async def addreminder(interaction: discord.Interaction, group: str):
 
 
 
-@client.tree.command(name="chat", description="Chat with a K-pop idol")
-@app_commands.describe(idol="Name of the idol (e.g. Jo Yuri, Eunchae)", message="What do you want to say?")
-async def chat(interaction: discord.Interaction, idol: str, message: str):
+@client.tree.command(name="chat", description="Chat with Miyeon from (G)I-DLE")
+@app_commands.describe(message="What do you want to say to Miyeon?")
+async def chat(interaction: discord.Interaction, message: str):
     await interaction.response.defer()
 
-    system_prompt = (
-        f"You are {idol}, a K-pop idol. Respond in character as {idol} — be warm, playful, and charming. "
-        f"Keep responses concise (2-4 sentences). Do not break character or mention being an AI. "
-        f"You are currently talking to {interaction.user.display_name}. "
-        f"If other users are mentioned, treat them as fans or friends you don't personally know and respond naturally."
-    )
+    user_data = load_user_data()
+    uid = str(interaction.user.id)
+    now = datetime.now(pytz.utc)
+
+    if uid not in user_data:
+        user_data[uid] = {"last_seen": None, "nickname": None}
+
+    # Build system prompt with nickname if stored
+    nickname = user_data[uid].get("nickname")
+    display = interaction.user.display_name
+    prompt_user = f"{display} (you sometimes call them '{nickname}')" if nickname else display
+    system_prompt = MIYEON_PROMPT.replace("{user}", prompt_user)
 
     # Resolve any @mentions to display names
     resolved_message = message
@@ -259,11 +341,38 @@ async def chat(interaction: discord.Interaction, idol: str, message: str):
             resolved_message = resolved_message.replace(f'<@{mention_id}>', f'@{member.display_name}')
             resolved_message = resolved_message.replace(f'<@!{mention_id}>', f'@{member.display_name}')
 
-    key = (interaction.user.id, idol.lower().strip())
+    # Build hidden context tags to prepend to the message
+    context_tags = []
+
+    # Return-user detection — 3+ hours since last message
+    last_seen = user_data[uid].get("last_seen")
+    if last_seen:
+        last_seen_dt = datetime.fromisoformat(last_seen)
+        if last_seen_dt.tzinfo is None:
+            last_seen_dt = pytz.utc.localize(last_seen_dt)
+        hours_away = (now - last_seen_dt).total_seconds() / 3600
+        if hours_away >= 3:
+            context_tags.append("(User is returning after a while)")
+
+    # Mood tagging
+    mood = detect_mood(resolved_message)
+    if mood == "sad":
+        context_tags.append("(User seems sad or down — be extra gentle and comforting)")
+    elif mood == "flirty":
+        context_tags.append("(User is being flirty — respond with soft teasing or bashfulness)")
+    elif mood == "excited":
+        context_tags.append("(User is excited or happy — match their energy)")
+
+    # Prepend context tags as a hidden system note
+    final_message = resolved_message
+    if context_tags:
+        final_message = "\n".join(context_tags) + "\n" + resolved_message
+
+    key = interaction.user.id
     if key not in chat_histories:
         chat_histories[key] = []
 
-    chat_histories[key].append({"role": "user", "content": resolved_message})
+    chat_histories[key].append({"role": "user", "content": final_message})
 
     # Keep last 20 messages to avoid token costs blowing up
     history = chat_histories[key][-20:]
@@ -277,20 +386,30 @@ async def chat(interaction: discord.Interaction, idol: str, message: str):
         )
         reply = response.content[0].text
         chat_histories[key].append({"role": "assistant", "content": reply})
-        await interaction.followup.send(f"**{idol.title()}:** {reply}")
+
+        # Extract and store nickname if Miyeon used one
+        found_nick = extract_nickname(reply)
+        if found_nick and not user_data[uid].get("nickname"):
+            user_data[uid]["nickname"] = found_nick
+
+        # Update last seen
+        user_data[uid]["last_seen"] = now.isoformat()
+        save_user_data(user_data)
+
+        await interaction.followup.send(f"**Miyeon:** {reply}")
     except Exception as e:
         await interaction.followup.send(f"❌ Could not get a response: {e}")
 
 
-@client.tree.command(name="clearchat", description="Clear your conversation history with an idol")
-@app_commands.describe(idol="Name of the idol to clear history with")
-async def clearchat(interaction: discord.Interaction, idol: str):
-    key = (interaction.user.id, idol.lower().strip())
-    if key in chat_histories:
-        del chat_histories[key]
-        await interaction.response.send_message(f"🗑️ Cleared chat history with **{idol.title()}**.", ephemeral=True)
-    else:
-        await interaction.response.send_message(f"No chat history found with **{idol.title()}**.", ephemeral=True)
+@client.tree.command(name="clearchat", description="Clear your conversation history with Miyeon")
+async def clearchat(interaction: discord.Interaction):
+    uid = str(interaction.user.id)
+    chat_histories.pop(interaction.user.id, None)
+    user_data = load_user_data()
+    if uid in user_data:
+        del user_data[uid]
+        save_user_data(user_data)
+    await interaction.response.send_message("🗑️ Cleared your chat history with Miyeon.", ephemeral=True)
 
 
 @tasks.loop(minutes=1)
