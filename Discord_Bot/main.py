@@ -56,6 +56,7 @@ def save_reminders(reminders):
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 
 client = Client(intents=intents)
 
@@ -247,6 +248,11 @@ async def chat(interaction: discord.Interaction, idol: str, message: str):
     resolved_message = message
     for mention_id in re.findall(r'<@!?(\d+)>', message):
         member = interaction.guild.get_member(int(mention_id))
+        if not member:
+            try:
+                member = await interaction.guild.fetch_member(int(mention_id))
+            except Exception:
+                member = None
         if member:
             resolved_message = resolved_message.replace(f'<@{mention_id}>', f'@{member.display_name}')
             resolved_message = resolved_message.replace(f'<@!{mention_id}>', f'@{member.display_name}')
