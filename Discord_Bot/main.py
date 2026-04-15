@@ -81,6 +81,10 @@ async def addidolpic(interaction: discord.Interaction, name: str, url: str):
         await interaction.followup.send("🚫 You don't have permission to use this command.")
         return
 
+    #Auto-convert imgur page URLs to direct image links
+    if re.match(r'https?://imgur\.com/([a-zA-Z0-9]+)$', url):
+        url = re.sub(r'https?://imgur\.com/([a-zA-Z0-9]+)', r'https://i.imgur.com/\1.jpg', url)
+
     #Continue with image validation and JSON update...
     if not url.lower().endswith((".jpg", ".jpeg", ".png", ".gif")):
         await interaction.followup.send("❌ URL must end in .jpg, .jpeg, .gif, or .png")
