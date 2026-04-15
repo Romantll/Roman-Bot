@@ -243,11 +243,19 @@ async def chat(interaction: discord.Interaction, idol: str, message: str):
         f"Keep responses concise (2-4 sentences). Do not break character or mention being an AI."
     )
 
+    # Resolve any @mentions to display names
+    resolved_message = message
+    for mention_id in re.findall(r'<@!?(\d+)>', message):
+        member = interaction.guild.get_member(int(mention_id))
+        if member:
+            resolved_message = resolved_message.replace(f'<@{mention_id}>', f'@{member.display_name}')
+            resolved_message = resolved_message.replace(f'<@!{mention_id}>', f'@{member.display_name}')
+
     key = (interaction.user.id, idol.lower().strip())
     if key not in chat_histories:
         chat_histories[key] = []
 
-    chat_histories[key].append({"role": "user", "content": message})
+    chat_histories[key].append({"role": "user", "content": resolved_message})
 
     # Keep last 20 messages to avoid token costs blowing up
     history = chat_histories[key][-20:]
