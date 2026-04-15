@@ -94,6 +94,8 @@ async def addidolpic(interaction: discord.Interaction, name: str, url: str):
                         ext = '.gif'
                     elif 'png' in content_type:
                         ext = '.png'
+                    elif 'mp4' in content_type or 'video' in content_type:
+                        ext = '.mp4'
                     else:
                         ext = '.jpg'
             url = f'https://i.imgur.com/{image_id}{ext}'
@@ -101,8 +103,8 @@ async def addidolpic(interaction: discord.Interaction, name: str, url: str):
             url = f'https://i.imgur.com/{image_id}.jpg'
 
     #Continue with image validation and JSON update...
-    if not url.lower().endswith((".jpg", ".jpeg", ".png", ".gif")):
-        await interaction.followup.send("❌ URL must end in .jpg, .jpeg, .gif, or .png")
+    if not url.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".mp4")):
+        await interaction.followup.send("❌ URL must end in .jpg, .jpeg, .gif, .png, or .mp4")
         return
 
     try:
@@ -148,9 +150,12 @@ async def idolpic(interaction: discord.Interaction, name: str):
     image_url = await get_idol_image(name)  # get the image first
 
     if image_url:
-        embed = discord.Embed(title=f"{name.title()}", description="Here's your idol!")
-        embed.set_image(url=image_url)
-        await interaction.followup.send(embed=embed)  #one clean response
+        if image_url.lower().endswith(".mp4"):
+            await interaction.followup.send(f"**{name.title()}**\n{image_url}")
+        else:
+            embed = discord.Embed(title=f"{name.title()}", description="Here's your idol!")
+            embed.set_image(url=image_url)
+            await interaction.followup.send(embed=embed)
     else:
         await interaction.followup.send(f"I couldn't find images for **{name.title()}**.")
 
