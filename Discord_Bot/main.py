@@ -81,25 +81,6 @@ async def addidolpic(interaction: discord.Interaction, name: str, url: str):
         await interaction.followup.send("🚫 You don't have permission to use this command.")
         return
 
-    #Auto-convert imgur page URLs to direct image links
-    imgur_match = re.match(r'https?://imgur\.com/([a-zA-Z0-9]+)$', url)
-    if imgur_match:
-        image_id = imgur_match.group(1)
-        try:
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                async with session.head(f'https://i.imgur.com/{image_id}', allow_redirects=True) as resp:
-                    final_url = str(resp.url)
-                    # Extract extension from the final redirected URL
-                    for ext in ('.mp4', '.gif', '.png', '.jpeg', '.jpg'):
-                        if final_url.lower().endswith(ext):
-                            url = final_url
-                            break
-                    else:
-                        url = f'https://i.imgur.com/{image_id}.jpg'
-        except Exception:
-            url = f'https://i.imgur.com/{image_id}.jpg'
-
     #Continue with image validation and JSON update...
     if not url.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".mp4")):
         await interaction.followup.send("❌ URL must end in .jpg, .jpeg, .gif, .png, or .mp4")
