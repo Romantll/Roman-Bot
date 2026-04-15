@@ -17,6 +17,9 @@ load_dotenv()
 
 anthropic_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
+# Stores conversation history per (user_id, idol) — resets when bot restarts
+chat_histories = {}
+
 Allowed_User_IDS = [130824833528233984, 121081639571816449]  #User IDs of allowed users
 REMINDER_FILE = "comeback_reminders.json"
 
@@ -240,17 +243,38 @@ async def chat(interaction: discord.Interaction, idol: str, message: str):
         f"Keep responses concise (2-4 sentences). Do not break character or mention being an AI."
     )
 
+    key = (interaction.user.id, idol.lower().strip())
+    if key not in chat_histories:
+        chat_histories[key] = []
+
+    chat_histories[key].append({"role": "user", "content": message})
+
+    # Keep last 20 messages to avoid token costs blowing up
+    history = chat_histories[key][-20:]
+
     try:
         response = anthropic_client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=300,
             system=system_prompt,
-            messages=[{"role": "user", "content": message}]
+            messages=history
         )
         reply = response.content[0].text
+        chat_histories[key].append({"role": "assistant", "content": reply})
         await interaction.followup.send(f"**{idol.title()}:** {reply}")
     except Exception as e:
         await interaction.followup.send(f"❌ Could not get a response: {e}")
+
+
+@client.tree.command(name="clearchat", description="Clear your conversation history with an idol")
+@app_commands.describe(idol="Name of the idol to clear history with")
+async def clearchat(interaction: discord.Interaction, idol: str):
+    key = (interaction.user.id, idol.lower().strip())
+    if key in chat_histories:
+        del chat_histories[key]
+        await interaction.response.send_message(f"🗑️ Cleared chat history with **{idol.title()}**.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"No chat history found with **{idol.title()}**.", ephemeral=True)
 
 
 @tasks.loop(minutes=1)
