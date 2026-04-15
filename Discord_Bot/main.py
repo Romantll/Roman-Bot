@@ -3,6 +3,7 @@ import json
 import os
 import pytz
 import re
+import anthropic
 from dateutil import parser
 from datetime import datetime, timedelta
 from discord.ext import tasks
@@ -13,6 +14,8 @@ from redditpicture import get_random_image
 from dotenv import load_dotenv
 from idolImages import get_idol_image,get_available_idols
 load_dotenv()
+
+anthropic_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 Allowed_User_IDS = [130824833528233984, 121081639571816449]  #User IDs of allowed users
 REMINDER_FILE = "comeback_reminders.json"
@@ -225,6 +228,29 @@ async def addreminder(interaction: discord.Interaction, group: str):
     )
 
 
+
+
+@client.tree.command(name="chat", description="Chat with a K-pop idol")
+@app_commands.describe(idol="Name of the idol (e.g. Jo Yuri, Eunchae)", message="What do you want to say?")
+async def chat(interaction: discord.Interaction, idol: str, message: str):
+    await interaction.response.defer()
+
+    system_prompt = (
+        f"You are {idol}, a K-pop idol. Respond in character as {idol} — be warm, playful, and charming. "
+        f"Keep responses concise (2-4 sentences). Do not break character or mention being an AI."
+    )
+
+    try:
+        response = anthropic_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=300,
+            system=system_prompt,
+            messages=[{"role": "user", "content": message}]
+        )
+        reply = response.content[0].text
+        await interaction.followup.send(f"**{idol.title()}:** {reply}")
+    except Exception as e:
+        await interaction.followup.send(f"❌ Could not get a response: {e}")
 
 
 @tasks.loop(minutes=1)
