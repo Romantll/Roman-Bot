@@ -82,8 +82,23 @@ async def addidolpic(interaction: discord.Interaction, name: str, url: str):
         return
 
     #Auto-convert imgur page URLs to direct image links
-    if re.match(r'https?://imgur\.com/([a-zA-Z0-9]+)$', url):
-        url = re.sub(r'https?://imgur\.com/([a-zA-Z0-9]+)', r'https://i.imgur.com/\1.jpg', url)
+    imgur_match = re.match(r'https?://imgur\.com/([a-zA-Z0-9]+)$', url)
+    if imgur_match:
+        image_id = imgur_match.group(1)
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.head(f'https://i.imgur.com/{image_id}', allow_redirects=True) as resp:
+                    content_type = resp.headers.get('Content-Type', '')
+                    if 'gif' in content_type:
+                        ext = '.gif'
+                    elif 'png' in content_type:
+                        ext = '.png'
+                    else:
+                        ext = '.jpg'
+            url = f'https://i.imgur.com/{image_id}{ext}'
+        except Exception:
+            url = f'https://i.imgur.com/{image_id}.jpg'
 
     #Continue with image validation and JSON update...
     if not url.lower().endswith((".jpg", ".jpeg", ".png", ".gif")):
